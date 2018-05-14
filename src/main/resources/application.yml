@@ -1,0 +1,26 @@
+spring.application.name: RestApp
+spring.jersey.application-path: engine-rest
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/camunda
+    username: postgres
+    password: 123456
+    driverClassName: org.postgresql.Driver
+camunda:
+  bpm:
+    database:
+      type: postgres
+      schema-update: true
+    application:
+      delete-upon-undeploy: false
+      auto-deployment-enabled: true
+      scan-for-process-definitions: true
+      deploy-changed-only: true
+      resume-previous-versions: true
+      resume-previous-by: a value
+    job-execution:
+      enabled: true
+    metrics:
+      enabled: false
+      db-reporter-activate: false
+
