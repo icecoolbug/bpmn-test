@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/go-resty/resty"
@@ -30,7 +32,7 @@ func startRemoteProcess(key string, n int) {
 			SetBody("{}").
 			Post(engineUrl + "/process-definition/key/" + key + "/start")
 		//fmt.Printf("%v, %v\n", resp, err)
-		time.Sleep(5 * time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
 	}
 	chDone <- 0
 }
@@ -40,8 +42,8 @@ func fetchTasks(client *resty.Client, topic string) ([]ExternalTask, error) {
 		SetHeader("Content-Type", "application/json").
 		SetHeader("Accept", "application/json").
 		SetBody(`{
-		"workerId": "` + myWorkerId + `",
-		"maxTasks": 5,
+		"workerId": "` + myWorkerId + topic + `",
+		"maxTasks": 1,
 		"usePriority": true,
 		
 		"topics": [
@@ -77,7 +79,7 @@ func completeWorker(client *resty.Client, topic string, ch chan ExternalTask, n 
 			SetHeader("Content-Type", "application/json").
 			SetHeader("Accept", "application/json").
 			SetBody(`{
-				"workerId": "` + myWorkerId + `"
+				"workerId": "` + myWorkerId + topic + `"
 			}`).
 			Post(engineUrl + "/external-task/" + task.Id + "/complete")
 		//fmt.Printf("Complete: %s err=%v\n", task.Id, err)
@@ -119,27 +121,30 @@ func fetchWorker(client *resty.Client, topic string, ch chan ExternalTask) {
 	}
 }
 
+func topicWorker(topic string, n int) {
+	client := resty.New()
+	ch := make(chan ExternalTask)
+	go fetchWorker(client, topic, ch)
+	go completeWorker(client, topic, ch, n)
+}
+
 func main() {
-	n := 1000
+	n := 100
+	args := os.Args[1:]
+	if len(args) > 0 {
+		n, _ = strconv.Atoi(args[0])
+	}
 	myWorkerId = fmt.Sprintf("worker-%d", rand.Int63())
 	chDone = make(chan int)
 
 	// start process instances
 	go startRemoteProcess("Proc_Order_Test", n)
+	// complete external tasks
+	go topicWorker("ReserveGoods", n)
+	// complete external tasks
+	go topicWorker("Charge", n)
 
-	client1 := resty.New()
-	client2 := resty.New()
-	ch1 := make(chan ExternalTask)
-	ch2 := make(chan ExternalTask)
-
-	// start fetching
-	go fetchWorker(client1, "ReserveGoods", ch1)
-	go fetchWorker(client1, "Charge", ch2)
-
-	// start completion workers
-	go completeWorker(client2, "ReserveGoods", ch1, n)
-	go completeWorker(client2, "Charge", ch2, n)
-
+	// wait for workers
 	_ = <-chDone
 	_ = <-chDone
 	_ = <-chDone
